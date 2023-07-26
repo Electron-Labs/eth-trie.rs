@@ -365,11 +365,7 @@ where
                 err_key: Some(key.to_vec()),
             })
         } else {
-            let mut path = result?;
-            match self.root {
-                Node::Empty => {}
-                _ => path.push(self.root.clone()),
-            }
+            let path = result?;
             Ok(path
                 .into_iter()
                 .rev()
@@ -719,15 +715,22 @@ where
     ) -> TrieResult<Vec<Node>> {
         let partial = &path.offset(path_index);
         match source_node {
-            Node::Empty | Node::Leaf(_) => Ok(vec![]),
+            Node::Empty => {
+                Ok(vec![])
+            },
+            Node::Leaf(_) => {
+                Ok(vec![source_node.clone()])
+            },
             Node::Branch(branch) => {
                 let borrow_branch = branch.read().unwrap();
 
                 if partial.is_empty() || partial.at(0) == 16 {
-                    Ok(vec![])
+                    Ok(vec![source_node.clone()])
                 } else {
                     let node = &borrow_branch.children[partial.at(0)];
-                    self.get_path_at(node, path, path_index + 1)
+                    let mut rest = self.get_path_at(&node, path, path_index + 1)?;
+                    rest.push(source_node.clone());
+                    Ok(rest)
                 }
             }
             Node::Extension(ext) => {
@@ -737,9 +740,11 @@ where
                 let match_len = partial.common_prefix(prefix);
 
                 if match_len == prefix.len() {
-                    self.get_path_at(&borrow_ext.node, path, path_index + match_len)
+                    let mut rest = self.get_path_at(&borrow_ext.node, path, path_index + match_len)?;
+                    rest.push(source_node.clone());
+                    Ok(rest)
                 } else {
-                    Ok(vec![])
+                    Ok(vec![source_node.clone()])
                 }
             }
             Node::Hash(hash_node) => {
@@ -752,9 +757,7 @@ where
                         root_hash: Some(self.root_hash),
                         err_key: None,
                     })?;
-                let mut rest = self.get_path_at(&n, path, path_index)?;
-                rest.push(n);
-                Ok(rest)
+                self.get_path_at(&n, path, path_index)
             }
         }
     }
